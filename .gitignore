@@ -1,0 +1,91 @@
+# Allow example files to be versioned
+!example.*
+
+# Local & Secret configuration (do NOT commit)
+config.local.*
+*.local
+*.local.*
+secret.*
+*.secret.*
+
+# Environment variable files
+.env
+.env.*
+!.env.example
+!.env.test
+
+# System and editor-specific files
+.DS_Store
+Thumbs.db
+*.sw?
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+.vscode/
+# .vscode/*
+# !.vscode/extensions.json
+.code-workspace
+.idea/
+
+# Logs and temporary files
+logs/
+*.log
+*.tmp
+*.bak
+
+# Trunk cache and analysis results
+.trunk/**
+!.trunkignore
+!.trunk/trunk.yaml
+!.trunk/checks.yaml
+!.trunk/configs/
+!.trunk/configs/**
+!.trunk/.gitignore
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Build and packaging
+*.egg
+*.egg-info/
+dist/
+build/
+*.manifest
+*.spec
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Test and static analysis tools
+htmlcov/
+.coverage
+.tox/
+.nox/
+.cache/
+.mypy_cache/
+.pytype/
+.pytest_cache/
+ruff_cache/
+
+# Image files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.webp
+*.svg
+*.ico
+*.heic
+*.drawio
