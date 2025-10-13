@@ -13,14 +13,17 @@ load_dotenv(dotenv_path=env_path, override=False)
 class Settings(BaseSettings):
     """Application settings."""
 
+    # Storage Type
+    SOURCE_TYPE: str
+
     # QA File Path
     QA_FILE_PATH: Path
 
     # HuggingFace Dataset
-    DATASET: str
+    DATASET_NAME: str
     DATASET_HASH: str
-    QUES_COLUMN: str
-    ANS_COLUMN: str
+    QUES_COLUMN_NAME: str
+    ANS_COLUMN_NAME: str
     QUES_PATTERN: str
     ANS_PATTERN: str
 

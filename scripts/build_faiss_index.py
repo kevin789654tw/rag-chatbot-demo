@@ -2,26 +2,48 @@ import os
 
 from app.config import settings
 from app.core.services.similarity import SimilarityConverter
-from app.data.csv_loader import CSVLoader
+from app.data.data_loader import DataLoader
 from app.data.embedding import EmbeddingFactory
 from app.data.faiss_index import FAISSIndexManager
 
 
 def main():
-    # Step 1: Load CSV as Documents
-    if not os.path.exists(settings.QA_FILE_PATH):
-        raise FileNotFoundError(f"CSV file not found: {settings.QA_FILE_PATH}")
+    loader = DataLoader()
 
-    loader = CSVLoader(
-        settings.QA_FILE_PATH, settings.QUES_PATTERN, settings.ANS_PATTERN
-    )
     try:
-        documents = loader.load()
+        match settings.SOURCE_TYPE:
+            case "csv":
+                if not os.path.exists(settings.QA_FILE_PATH):
+                    raise FileNotFoundError(
+                        f"Dataset not found: {settings.QA_FILE_PATH}"
+                    )
+                questions, answers = loader.load_csv_file(
+                    settings.QA_FILE_PATH, encoding="utf-8"
+                )
+                source_name = settings.QA_FILE_PATH.name
+            case "huggingface":
+                questions, answers = loader.load_huggingface_dataset(
+                    settings.DATASET_NAME,
+                    settings.DATASET_HASH,
+                    settings.QUES_COLUMN_NAME,
+                    settings.ANS_COLUMN_NAME,
+                )
+                source_name = settings.DATASET_NAME
+            case _:
+                raise ValueError(f"Unknown source type: {settings.SOURCE_TYPE}")
     except Exception as e:
-        raise RuntimeError(f"Failed to read CSV: {e}")
+        raise RuntimeError(f"Failed to read dataset: {e}")
+
+    documents = loader.build_documents(
+        source_name,
+        questions,
+        answers,
+        settings.QUES_PATTERN,
+        settings.ANS_PATTERN,
+    )
 
     if not documents:
-        raise ValueError("CSV is empty, cannot create index")
+        raise ValueError("Dataset is empty, cannot create index")
 
     # Step 2: Embeddings
     embedding_model = EmbeddingFactory.create_jina_embedding_model()
