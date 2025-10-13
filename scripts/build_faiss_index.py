@@ -1,75 +1,65 @@
-# import pandas as pd
-from datasets import load_dataset
-from langchain.docstore.document import Document
-from langchain_community.embeddings import JinaEmbeddings
-from langchain_community.vectorstores import FAISS
+import os
 
 from app.config import settings
+from app.core.services.similarity import SimilarityConverter
+from app.data.csv_loader import CSVLoader
+from app.data.embedding import EmbeddingFactory
+from app.data.faiss_index import FAISSIndexManager
 
 
-def score_to_similarity(distance: float):
-    return 1 - (distance**2) / 2
+def main():
+    # Step 1: Load CSV as Documents
+    if not os.path.exists(settings.QA_FILE_PATH):
+        raise FileNotFoundError(f"CSV file not found: {settings.QA_FILE_PATH}")
 
+    loader = CSVLoader(
+        settings.QA_FILE_PATH, settings.QUES_PATTERN, settings.ANS_PATTERN
+    )
+    try:
+        documents = loader.load()
+    except Exception as e:
+        raise RuntimeError(f"Failed to read CSV: {e}")
 
-def similarity_to_score(cosine_similarity: float):
-    return (2 * (1 - cosine_similarity)) ** 0.5
+    if not documents:
+        raise ValueError("CSV is empty, cannot create index")
 
+    # Step 2: Embeddings
+    embedding_model = EmbeddingFactory.create_jina_embedding_model()
 
-qa_dataset = load_dataset(
-    settings.DATASET, revision=settings.DATASET_HASH
-)  # nosec: B615
-
-questions = list(qa_dataset["train"][settings.QUES_COLUMN])
-answers = list(qa_dataset["train"][settings.ANS_COLUMN])
-
-
-# # --- Load local CSV file ---
-# df = pd.read_csv(str(settings.QA_FILE_PATH)).dropna()  # remove empty rows
-
-# if df.empty or len(df.columns) < 2:
-#     raise ValueError("CSV data is empty or doesn't have at least 2 columns.")
-
-# questions = df.iloc[:, 0].tolist()
-# answers = df.iloc[:, 1].tolist()
-# # ---------------------------
-
-ques_pattern, ans_pattern = settings.QUES_PATTERN, settings.ANS_PATTERN
-
-documents = []
-for question, answer in zip(questions[0:500], answers[0:500]):
-
-    if ques_pattern and ques_pattern in question:
-        question = question.split(ques_pattern)[1].strip()
-
-    if ans_pattern and ans_pattern in answer:
-        answer = answer.split(ans_pattern)[1].strip()
-
-    doc = Document(page_content=question, metadata={"answer": answer})
-    documents.append(doc)
-
-embeddings = JinaEmbeddings(
-    jina_api_key=settings.JINA_API_KEY, model_name=settings.EMBEDDING_MODEL
-)
-vector_index = FAISS.from_documents(documents, embeddings)
-
-# save
-vector_index.save_local(settings.FAISS_INDEX_PATH)
-
-query = "How many types of Eucalyptus are grown around the world?"
-docs_with_scores = vector_index.similarity_search_with_score(query, k=3)
-
-threshold = 0
-
-for doc, score in docs_with_scores:
-    score = score_to_similarity(score)
-    if score >= threshold:
-        print("\n")
-        print("Found Question:", doc.page_content)
-        print("Corresponding Answer:", doc.metadata["answer"])
-        print("Similarity Score:", score)
+    # Step 3: Build FAISS Index
+    if os.path.exists(settings.FAISS_INDEX_PATH):
+        print("Loading existing FAISS index...")
+        vector_index = FAISSIndexManager.load(
+            settings.FAISS_INDEX_PATH, embedding_model
+        )
     else:
-        print("\n")
+        print("Creating FAISS index...")
+        vector_index = FAISSIndexManager.build(documents, embedding_model)
+        FAISSIndexManager.save(
+            vector_index, settings.FAISS_INDEX_PATH, settings.FAISS_INDEX_NAME
+        )
+        print(f"Saved FAISS index to {settings.FAISS_INDEX_PATH}")
+
+    # Step 4: Test Query
+    query = "How many types of Eucalyptus are grown around the world?"
+    docs_with_scores = vector_index.similarity_search_with_score(
+        query, k=settings.RETRIEVAL_TOP_K
+    )
+
+    for doc, score in docs_with_scores:
+        score = SimilarityConverter.score_to_similarity(score)
+        if score >= settings.SIMILARITY_THRESHOLD:
+            print("\n")
+            print("Found Question:", doc.page_content)
+            print("Corresponding Answer:", doc.metadata["answer"])
+            print("Similarity Score:", score)
+        else:
+            print("\n")
+            print("No relevant question found.")
+
+    if not docs_with_scores:
         print("No relevant question found.")
 
-if not docs_with_scores:
-    print("No relevant question found.")
+
+if __name__ == "__main__":
+    main()
