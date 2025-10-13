@@ -7,7 +7,7 @@ class EmbeddingFactory:
     """Factory for creating embedding model instances."""
 
     @staticmethod
-    def create_jina_embedding_model():
+    def create_jina_embedding_model() -> JinaEmbeddings:
         """Create and initialize a Jina embedding model.
 
         Returns:
