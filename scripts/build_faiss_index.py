@@ -30,7 +30,7 @@ def main():
     if os.path.exists(settings.FAISS_INDEX_PATH):
         print("Loading existing FAISS index...")
         vector_index = FAISSIndexManager.load(
-            settings.FAISS_INDEX_PATH, embedding_model
+            settings.FAISS_INDEX_PATH, embedding_model, settings.FAISS_INDEX_NAME
         )
     else:
         print("Creating FAISS index...")

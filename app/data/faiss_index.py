@@ -31,12 +31,13 @@ class FAISSIndexManager:
         vector_db.save_local(path, index_name)
 
     @staticmethod
-    def load(path: Path, embeddings) -> VectorStore:
+    def load(path: Path, embeddings, index_name: str = "index") -> VectorStore:
         """Load FAISS index from local storage.
 
         Args:
-            path (str): Path to the FAISS index.
+            path (Path): Path to the FAISS index directory.
             embeddings: Embedding model used for index.
+            index_name (str): Name of the FAISS index file.
 
         Returns:
             FAISS: A FAISS vector store.
@@ -44,4 +45,9 @@ class FAISSIndexManager:
         # NOTE: allow_dangerous_deserialization=True is required for loading pickled metadata.
         # Be cautious: pickle deserialization can execute arbitrary code.
         # Only enable this if the index files come from a trusted source.
-        return FAISS.load_local(path, embeddings, allow_dangerous_deserialization=True)
+        return FAISS.load_local(
+            path,
+            embeddings,
+            index_name=index_name,
+            allow_dangerous_deserialization=True,
+        )
