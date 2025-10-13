@@ -56,7 +56,9 @@ def main():
         )
     else:
         print("Creating FAISS index...")
-        vector_index = FAISSIndexManager.build(documents, embedding_model)
+        vector_index = FAISSIndexManager.build(
+            documents, embedding_model, settings.EMBEDDING_BATCH_SIZE
+        )
         FAISSIndexManager.save(
             vector_index, settings.FAISS_INDEX_PATH, settings.FAISS_INDEX_NAME
         )

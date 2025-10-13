@@ -1,27 +1,40 @@
 from pathlib import Path
 from typing import List
 
+from langchain.docstore.document import Document
+from langchain.embeddings.base import Embeddings
 from langchain_community.vectorstores import FAISS
-from langchain_core.embeddings.base import BaseEmbeddings
-from langchain_core.schema import Document
-from langchain_core.vectorstores import VectorStore
 
 
 class FAISSIndexManager:
     """Manager class for building, saving, and loading FAISS indexes."""
 
     @staticmethod
-    def build(documents: List[Document], embeddings: BaseEmbeddings) -> VectorStore:
-        """Build a FAISS index from documents.
+    def build(
+        documents: List[Document], embeddings: Embeddings, batch_size: int = 512
+    ) -> FAISS:
+        """Build a FAISS index from documents in batches to avoid API limits.
 
         Args:
             documents (List[Document]): List of documents to index.
-            embeddings: Embedding model to use.
+            embeddings (Embeddings): Embedding model to use.
+            batch_size (int, optional): Max number of documents per embedding batch. Defaults to 512.
 
         Returns:
-            FAISS: A FAISS vector store.
+            FAISS: A FAISS vector index.
         """
-        return FAISS.from_documents(documents, embeddings)
+
+        # Ensure `vector_index` is a valid FAISS object before calling `merge_from` for the first time
+        vector_index = FAISS.from_documents(documents[:batch_size], embeddings)
+
+        for i in range(batch_size, len(documents), batch_size):
+            batch_docs = documents[i : i + batch_size]
+            batch_vector_index = FAISS.from_documents(batch_docs, embeddings)
+
+            # merge multiple FAISS indexes into one for unified retrieval
+            vector_index.merge_from(batch_vector_index)
+
+        return vector_index
 
     @staticmethod
     def save(vector_index: FAISS, path: Path, index_name: str) -> None:
@@ -38,14 +51,12 @@ class FAISSIndexManager:
         vector_index.save_local(path, index_name)
 
     @staticmethod
-    def load(
-        path: Path, embeddings: BaseEmbeddings, index_name: str = "index"
-    ) -> VectorStore:
+    def load(path: Path, embeddings: Embeddings, index_name: str = "index") -> FAISS:
         """Load FAISS index from local storage.
 
         Args:
             path (Path): Path to the FAISS index directory.
-            embeddings: Embedding model used for index.
+            embeddings (Embeddings): Embedding model used for index.
             index_name (str, optional): Name of the FAISS index file. Defaults to "index".
 
         Returns:

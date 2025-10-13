@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # JINA & Embedding Model
     JINA_API_KEY: str
     EMBEDDING_MODEL: str
+    EMBEDDING_BATCH_SIZE: int
 
     # FAISS Index
     FAISS_INDEX_PATH: Path
