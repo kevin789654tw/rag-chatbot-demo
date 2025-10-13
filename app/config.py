@@ -13,6 +13,17 @@ load_dotenv(dotenv_path=env_path, override=False)
 class Settings(BaseSettings):
     """Application settings."""
 
+    # QA File Path
+    QA_FILE_PATH: Path
+
+    # HuggingFace Dataset
+    DATASET: str
+    DATASET_HASH: str
+    QUES_COLUMN: str
+    ANS_COLUMN: str
+    QUES_PATTERN: str
+    ANS_PATTERN: str
+
     # OpenRouter & Query Model
     OPENROUTER_API_KEY: str
     OPENROUTER_BASE_URL: str
