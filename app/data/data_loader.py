@@ -9,8 +9,9 @@ from langchain.docstore.document import Document
 class DataLoader:
     """Load and normalize Q&A data from multiple sources into LangChain Documents."""
 
+    @staticmethod
     def load_csv_file(
-        self, file_path: Path, encoding: str = "utf-8"
+        file_path: Path, encoding: str = "utf-8"
     ) -> tuple[list[str], list[str]]:
         """Load Q&A pairs from a CSV file.
 
@@ -38,8 +39,8 @@ class DataLoader:
 
         return questions, answers
 
+    @staticmethod
     def load_huggingface_dataset(
-        self,
         dataset: str,
         dataset_hash: str,
         ques_column_name: str,
@@ -68,8 +69,8 @@ class DataLoader:
 
         return questions, answers
 
+    @staticmethod
     def build_documents(
-        self,
         source_name: str,
         questions: list[str],
         answers: list[str],
