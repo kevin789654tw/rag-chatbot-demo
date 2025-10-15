@@ -39,7 +39,10 @@ async def init_conversation():
     cl.user_session.set("memory", memory)
 
     await cl.Message(
-        content="嗨您好，我是您的 AI 助手！ \n我今天可以幫助您處理哪些相關的事情呢？"
+        content=(
+            "Hi! I'm your AI Assistant 😊\n"
+            "What would you like help with today?"
+        )
     ).send()
 
 
@@ -47,7 +50,7 @@ async def check_and_rewrite_query(query: str, history: list) -> dict:
     """rewrite check"""
     history_text = "\n".join(
         [
-            f"{'用戶' if isinstance(msg, HumanMessage) else 'AI'}: {msg.content}"
+            f"{'User' if isinstance(msg, HumanMessage) else 'AI'}: {msg.content}"
             # last 5 interactions (1 interaction = HumanMessage + AIMessage)
             for msg in history[-(settings.MEMORY_WINDOW * 2) :]
         ]
@@ -78,7 +81,7 @@ async def handle_user_message(message: cl.Message):
     memory = cl.user_session.get("memory")
 
     # Step 1: Query Rewriting Check
-    rewrite_msg = cl.Message(content="🔍 分析查詢中...")
+    rewrite_msg = cl.Message(content="🔍 Let me analyze your query...")
     await rewrite_msg.send()
 
     history = memory.load_memory_variables({}).get("history", [])
@@ -88,16 +91,21 @@ async def handle_user_message(message: cl.Message):
     rewrite_result = await check_and_rewrite_query(message.content, history)
 
     if rewrite_result["needs_rewrite"]:
-        rewrite_msg.content = f"✏️ **查詢已優化**\n原始: {message.content}\n優化: {rewrite_result['rewritten_query']}\n原因: {rewrite_result['reason']}"
+        rewrite_msg.content = (
+            f"✏️ **Query Normalized** \n"
+            f"Your original query: {message.content} \n"
+            f"Normalized query: {rewrite_result['rewritten_query']} \n"
+            f"Reason: {rewrite_result['reason']}"
+        )
         final_query = rewrite_result["rewritten_query"]
     else:
-        rewrite_msg.content = "✓ 查詢清晰，無需重寫"
+        rewrite_msg.content = "✅ Got it! Your query is clear and doesn’t need rewriting."
         final_query = message.content
 
     await rewrite_msg.update()
 
     # Step 2: Retrieve Relevant Documents
-    retrieval_msg = cl.Message(content="📚 檢索相關文件...")
+    retrieval_msg = cl.Message(content="📚 Let me fetch the relevant documents...")
     await retrieval_msg.send()
     await cl.sleep(1)  # make sure the msg show up
 
@@ -113,11 +121,13 @@ async def handle_user_message(message: cl.Message):
             score = SimilarityConverter.score_to_similarity(score)
             if score >= settings.SIMILARITY_THRESHOLD:
                 print("\n")
-                print(f"找到的問題: {doc.page_content}")
-                print(f"對應答案: {doc.metadata['answer']}")
-                print(f"相似度分數: {score}")
+                print(f"Found question: {doc.page_content}")
+                print(f"Corresponding answer: {doc.metadata['answer']}")
+                print(f"Similarity score: {score}")
                 contexts.append(
-                    f"[片段 {i+1}]\n 問題： {doc.page_content}\n 回答： {doc.metadata['answer']}"
+                    f"[Segment {i+1}] \n"
+                    f"Question： {doc.page_content} \n"
+                    f"Response： {doc.metadata['answer']}"
                 )
             else:
                 break
@@ -125,12 +135,15 @@ async def handle_user_message(message: cl.Message):
         if contexts:
             context = "\n---\n".join(contexts)
         else:
-            context = "無相關文件內容。"
+            context = "No relevant documents found."
 
-        retrieval_msg.content = f"✓ 找到 {len(docs_with_scores)} 個相關片段"
+        retrieval_msg.content = f"✅ I found {len(docs_with_scores)} relevant snippets!"
     else:
-        context = "無相關文件內容。"
-        retrieval_msg.content = "⚠️ 未找到相關文件，僅依靠對話歷史回答"
+        context = "No relevant documents found."
+        retrieval_msg.content = (
+            "⚠️ I couldn't find any relevant documents."
+            "I’ll answer based on our chat history."
+        )
     await retrieval_msg.update()
 
     # Step 3: Generate Answer
@@ -140,12 +153,12 @@ async def handle_user_message(message: cl.Message):
     if history:
         history_text = "\n".join(
             [
-                f"{'User' if isinstance(msg, HumanMessage) else 'AI'}: \n{msg.content}"
+                f"{'#### User' if isinstance(msg, HumanMessage) else '#### AI'}: \n{msg.content}"
                 for msg in history[-(settings.MEMORY_WINDOW * 2) :]
             ]
         )
     else:
-        history_text = "暫時無對話歷史。"
+        history_text = "No conversation history." + "\n\n---"
 
     prompt = RAG_PROMPT.format(
         history=history_text, context=context, question=final_query
@@ -162,6 +175,14 @@ async def handle_user_message(message: cl.Message):
     await answer_msg.update()
 
     # Step 4: Display Sources
+    match settings.SOURCE_TYPE:
+        case "csv":
+            source_name = settings.QA_FILE_PATH
+        case "huggingface":
+            source_name = f"https://huggingface.co/datasets/{settings.DATASET_NAME}"
+        case _:
+            raise ValueError(f"Unknown source type: {settings.SOURCE_TYPE}")
+
     if contexts:
         sources = []
         for i, (doc, score) in enumerate(docs_with_scores):
@@ -169,14 +190,23 @@ async def handle_user_message(message: cl.Message):
             if score >= settings.SIMILARITY_THRESHOLD:
                 # TODO: limit `doc.metadata['answer']` to prevent overly long source display
                 sources.append(
-                    f"**來源 {i+1}** (來自 {settings.QA_FILE_PATH}):\n> {doc.page_content}\n> {doc.metadata['answer']}"
+                    f"📖 **Source {i+1} :** \n"
+                    f"(from {source_name}) \n"
+                    f"> Question: {doc.page_content} \n"
+                    f"> Response: {doc.metadata['answer']}"
                 )
     else:
-        sources = ["無相關來源文件。"]
+        sources = ["Sorry, I couldn't find any relevant documents 😕"]
 
-    source_content = "**具體來源請參考以下：**\n" + "\n\n".join(sources)
+    source_content = (
+        "📚 **You can refer to the following sources:** \n" + 
+        "\n\n".join(sources)
+    )
     source_msg = cl.Message(content=source_content)
     await source_msg.send()
+
+    print(f"sources: {sources}")
+    print(f"source_content: {source_content}")
 
     # Step 5: Update Memory
     full_response = (
@@ -184,5 +214,5 @@ async def handle_user_message(message: cl.Message):
     )
     memory.save_context(
         {"input": message.content},
-        {"output": full_response + "\n\n" + source_content + "\n---\n"},
+        {"output": full_response + "\n" + "\n".join(sources) + "\n\n---"},
     )
