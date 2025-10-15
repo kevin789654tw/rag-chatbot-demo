@@ -13,15 +13,7 @@ from app.core.services.similarity import SimilarityConverter
 from app.data.embedding import EmbeddingFactory
 from app.data.faiss_index import FAISSIndexManager
 
-main_llm = ChatOpenAI(
-    api_key=settings.OPENROUTER_API_KEY,
-    base_url=settings.OPENROUTER_BASE_URL,
-    model=settings.QUERY_MODEL,
-    temperature=settings.QUERY_MODEL_TEMPERATURE,
-    streaming=True,
-)
-
-normalization_llm = ChatOpenAI(
+llm = ChatOpenAI(
     api_key=settings.OPENROUTER_API_KEY,
     base_url=settings.OPENROUTER_BASE_URL,
     model=settings.QUERY_MODEL,
@@ -46,7 +38,7 @@ async def init_conversation():
     ).send()
 
 
-async def check_and_rewrite_query(query: str, history: list) -> dict:
+async def normalize_and_rewrite_query(query: str, history: list) -> dict:
     """rewrite check"""
     history_text = "\n".join(
         [
@@ -56,20 +48,21 @@ async def check_and_rewrite_query(query: str, history: list) -> dict:
         ]
     )
 
-    prompt = QUERY_NORMALIZATION_PROMPT.format(history=history_text, query=query)
-    response = await normalization_llm.ainvoke([HumanMessage(content=prompt)])
+    prompt = QUERY_NORMALIZATION_PROMPT.format(history=history_text, question=query)
+    response = await llm.ainvoke([HumanMessage(content=prompt)])
 
+    needs_rewrite: bool = False
     try:
         print("Trying to parse JSON...")
         result = json.loads(response.content)
-        return result
+        needs_rewrite = True if result[0] != query else False
     except json.JSONDecodeError:
         print("JSON parsing failed.")
-        return {
-            "needs_rewrite": False,
-            "reason": "JSON parsing failed",
-            "rewritten_query": query,
-        }
+        result = [query]
+    return {
+        "needs_rewrite": needs_rewrite,
+        "normalize_query": result,
+    }
 
 
 @cl.on_message
@@ -81,26 +74,22 @@ async def handle_user_message(message: cl.Message):
     memory = cl.user_session.get("memory")
 
     # Step 1: Query Rewriting Check
-    rewrite_msg = cl.Message(content="🔍 Let me analyze your query...")
+    rewrite_msg = cl.Message(content="🔍 Let me analyze your question...")
     await rewrite_msg.send()
 
     history = memory.load_memory_variables({}).get("history", [])
-    print("\n")
-    print("msg：", message.content)
-    print("history：", history)
-    rewrite_result = await check_and_rewrite_query(message.content, history)
+    rewrite_result = await normalize_and_rewrite_query(message.content, history)
+    final_queries = rewrite_result["normalize_query"]
 
     if rewrite_result["needs_rewrite"]:
         rewrite_msg.content = (
             f"✏️ **Query Normalized** \n"
             f"Your original query: {message.content} \n"
-            f"Normalized query: {rewrite_result['rewritten_query']} \n"
-            f"Reason: {rewrite_result['reason']}"
+            f"Normalized query: {rewrite_result['normalize_query']} \n"
         )
-        final_query = rewrite_result["rewritten_query"]
+        final_query = rewrite_result["normalize_query"]
     else:
-        rewrite_msg.content = "✅ Got it! Your query is clear and doesn’t need rewriting."
-        final_query = message.content
+        rewrite_msg.content = "✅ Got it! Your question is clear and doesn’t need rewriting."
 
     await rewrite_msg.update()
 
@@ -111,9 +100,20 @@ async def handle_user_message(message: cl.Message):
 
     embedding_model = EmbeddingFactory.create_jina_embedding_model()
     vector_index = FAISSIndexManager.load(settings.FAISS_INDEX_PATH, embedding_model, settings.FAISS_INDEX_NAME)
-    docs_with_scores = vector_index.similarity_search_with_score(
-        final_query, k=settings.RETRIEVAL_TOP_K
-    )
+
+    docs_with_scores_list = []
+    for fq in final_queries:
+        docs_with_scores = vector_index.similarity_search_with_score(
+            fq, k=settings.RETRIEVAL_TOP_K
+        )
+        docs_with_scores_list.extend(docs_with_scores)
+
+    duplicate_contents = set()
+    docs_with_scores = []
+    for doc, score in docs_with_scores_list:
+        if doc.page_content not in duplicate_contents:
+            docs_with_scores.append((doc, score))
+            duplicate_contents.add(doc.page_content)
 
     if docs_with_scores:
         contexts = []
@@ -160,6 +160,7 @@ async def handle_user_message(message: cl.Message):
     else:
         history_text = "No conversation history." + "\n\n---"
 
+    final_query = ";".join(final_queries)
     prompt = RAG_PROMPT.format(
         history=history_text, context=context, question=final_query
     )
@@ -167,7 +168,7 @@ async def handle_user_message(message: cl.Message):
 
     # answer with streaming
     full_response = ""
-    async for chunk in main_llm.astream([HumanMessage(content=prompt)]):
+    async for chunk in llm.astream([HumanMessage(content=prompt)]):
         if chunk.content:
             full_response += chunk.content
             await answer_msg.stream_token(chunk.content)
@@ -205,8 +206,8 @@ async def handle_user_message(message: cl.Message):
     source_msg = cl.Message(content=source_content)
     await source_msg.send()
 
-    print(f"sources: {sources}")
-    print(f"source_content: {source_content}")
+    # print(f"sources: {sources}")
+    # print(f"source_content: {source_content}")
 
     # Step 5: Update Memory
     full_response = (
