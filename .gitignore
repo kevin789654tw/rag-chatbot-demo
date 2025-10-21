@@ -92,3 +92,7 @@ ruff_cache/
 
 # Local database files
 app/data/db/
+
+# Chainlit local state
+.chainlit/
+chainlit.md
