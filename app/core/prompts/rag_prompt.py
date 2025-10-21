@@ -51,10 +51,10 @@ Generate a well-structured, contextually consistent, and evidence-based response
 ---
 
 ### Expected Output Format
-**【Summary Answer】：**
+**【Summary Answer】**
 ...
 
-**【Detailed Explanation & Citations】：**
+**【Detailed Explanation & Citations】**
 - According to the document: "..."
 - From our chat history: 
   - Summarize relevant points only if conversation history exists.
