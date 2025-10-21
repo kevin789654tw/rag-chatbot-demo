@@ -76,10 +76,7 @@ def main():
 
     # Step 4: Build FAISS Index
     if os.path.exists(settings.FAISS_INDEX_PATH):
-        print("Loading existing FAISS index...")
-        vector_index = FAISSIndexManager.load(
-            settings.FAISS_INDEX_PATH, embedding_model, settings.FAISS_INDEX_NAME
-        )
+        print("FAISS index already exists")
     else:
         print("Creating FAISS index...")
         vector_index = FAISSIndexManager.build(
@@ -89,26 +86,6 @@ def main():
             vector_index, settings.FAISS_INDEX_PATH, settings.FAISS_INDEX_NAME
         )
         print(f"Saved FAISS index to {settings.FAISS_INDEX_PATH}")
-
-    # Step 5: Test Query
-    query = "How many types of Eucalyptus are grown around the world?"
-    docs_with_scores = vector_index.similarity_search_with_score(
-        query, k=settings.RETRIEVAL_TOP_K
-    )
-
-    for doc, score in docs_with_scores:
-        score = SimilarityConverter.score_to_similarity(score)
-        if score >= settings.SIMILARITY_THRESHOLD:
-            print("\n")
-            print("Found Question:", doc.page_content)
-            print("Corresponding Answer:", doc.metadata["answer"])
-            print("Similarity Score:", score)
-        else:
-            print("\n")
-            print("No relevant question found.")
-
-    if not docs_with_scores:
-        print("No relevant question found.")
 
 
 if __name__ == "__main__":
